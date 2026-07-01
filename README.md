@@ -1,0 +1,1 @@
+Upload files to GitHub repo, enable Pages in Settings > Pages.
