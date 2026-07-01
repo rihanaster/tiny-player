@@ -1,9 +1,111 @@
+let db;
+let items = [];
+let current = 0;
 
-let db,items=[],current=0;
-const open=indexedDB.open('hybrid-player',1);
-open.onupgradeneeded=e=>e.target.result.createObjectStore('items',{keyPath:'id',autoIncrement:true});
-open.onsuccess=e=>{db=e.target.result;load();};
-files.onchange=e=>{let t=db.transaction('items','readwrite');let s=t.objectStore('items');[...e.target.files].forEach(f=>s.add({type:'local',name:f.name,file:f}));t.oncomplete=load;};
-addUrl.onclick=()=>{let t=db.transaction('items','readwrite');t.objectStore('items').add({type:'stream',name:url.value,url:url.value});t.oncomplete=load;};
-function load(){let r=db.transaction('items').objectStore('items').getAll();r.onsuccess=()=>{items=r.result;playlist.innerHTML='';items.forEach((x,i)=>{let d=document.createElement('div');d.textContent=x.name;d.onclick=()=>play(i);playlist.appendChild(d);});};}
-function play(i){current=i;let x=items[i];audio.src=x.type==='local'?URL.createObjectURL(x.file):x.url;audio.play();}
+const fileInput = document.getElementById("files");
+const urlInput = document.getElementById("url");
+const addUrlBtn = document.getElementById("addUrl");
+const playlist = document.getElementById("playlist");
+const audio = document.getElementById("audio");
+
+const request = indexedDB.open("hybrid-player", 1);
+
+request.onupgradeneeded = (e) => {
+    e.target.result.createObjectStore("items", {
+        keyPath: "id",
+        autoIncrement: true
+    });
+};
+
+request.onsuccess = (e) => {
+    db = e.target.result;
+    load();
+};
+
+fileInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+
+    if (!files.length) {
+        alert("No files selected");
+        return;
+    }
+
+    const tx = db.transaction("items", "readwrite");
+    const store = tx.objectStore("items");
+
+    for (const file of files) {
+        const buffer = await file.arrayBuffer();
+
+        store.add({
+            type: "local",
+            name: file.name,
+            blob: new Blob([buffer], {
+                type: file.type || "audio/mpeg"
+            })
+        });
+    }
+
+    tx.oncomplete = () => {
+        alert(files.length + " file(s) imported");
+        load();
+    };
+});
+
+addUrlBtn.addEventListener("click", () => {
+    const value = urlInput.value.trim();
+
+    if (!value) {
+        return;
+    }
+
+    const tx = db.transaction("items", "readwrite");
+
+    tx.objectStore("items").add({
+        type: "stream",
+        name: value.split("/").pop(),
+        url: value
+    });
+
+    tx.oncomplete = () => {
+        urlInput.value = "";
+        load();
+    };
+});
+
+function load() {
+    const req = db.transaction("items")
+        .objectStore("items")
+        .getAll();
+
+    req.onsuccess = () => {
+        items = req.result;
+
+        playlist.innerHTML = "";
+
+        items.forEach((item, index) => {
+            const div = document.createElement("div");
+
+            div.textContent =
+                item.name +
+                (item.type === "local" ? " 📱" : " 🌐");
+
+            div.onclick = () => play(index);
+
+            playlist.appendChild(div);
+        });
+    };
+}
+
+function play(index) {
+    current = index;
+
+    const item = items[index];
+
+    if (item.type === "local") {
+        audio.src = URL.createObjectURL(item.blob);
+    } else {
+        audio.src = item.url;
+    }
+
+    audio.play();
+}
