@@ -8,6 +8,10 @@ const addUrlBtn = document.getElementById("addUrl");
 const playlist = document.getElementById("playlist");
 const audio = document.getElementById("audio");
 
+window.onerror = function(message, source, lineno) {
+    alert("JS Error: " + message + " (line " + lineno + ")");
+};
+
 const request = indexedDB.open("hybrid-player", 1);
 
 request.onupgradeneeded = (e) => {
@@ -22,10 +26,10 @@ request.onsuccess = (e) => {
     load();
 };
 
-fileInput.addEventListener("change", async (e) => {
-    const files = Array.from(e.target.files || []);
+fileInput.addEventListener("change", (e) => {
+    const selectedFiles = Array.from(e.target.files || []);
 
-    if (!files.length) {
+    if (!selectedFiles.length) {
         alert("No files selected");
         return;
     }
@@ -33,21 +37,22 @@ fileInput.addEventListener("change", async (e) => {
     const tx = db.transaction("items", "readwrite");
     const store = tx.objectStore("items");
 
-    for (const file of files) {
-        const buffer = await file.arrayBuffer();
-
+    selectedFiles.forEach((file) => {
         store.add({
             type: "local",
             name: file.name,
-            blob: new Blob([buffer], {
-                type: file.type || "audio/mpeg"
-            })
+            blob: file
         });
-    }
+    });
 
     tx.oncomplete = () => {
-        alert(files.length + " file(s) imported");
+        alert(selectedFiles.length + " file(s) imported");
         load();
+    };
+
+    tx.onerror = (e) => {
+        alert("Import failed");
+        console.error(e);
     };
 });
 
@@ -89,6 +94,9 @@ function load() {
                 item.name +
                 (item.type === "local" ? " 📱" : " 🌐");
 
+            div.style.cursor = "pointer";
+            div.style.padding = "8px";
+
             div.onclick = () => play(index);
 
             playlist.appendChild(div);
@@ -101,11 +109,24 @@ function play(index) {
 
     const item = items[index];
 
-    if (item.type === "local") {
-        audio.src = URL.createObjectURL(item.blob);
-    } else {
-        audio.src = item.url;
-    }
+    try {
+        if (item.type === "local") {
+            const objectUrl = URL.createObjectURL(item.blob);
 
-    audio.play();
+            audio.src = objectUrl;
+            audio.load();
+
+            audio.play().catch((err) => {
+                alert("Play failed: " + err.message);
+            });
+        } else {
+            audio.src = item.url;
+
+            audio.play().catch((err) => {
+                alert("Play failed: " + err.message);
+            });
+        }
+    } catch (err) {
+        alert("Playback error: " + err.message);
+    }
 }
